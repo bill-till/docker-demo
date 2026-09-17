@@ -12,14 +12,11 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 
-// Read secrets from files written by init container
 const REDIS_PASSWORD = fs.readFileSync('/secrets/REDIS_PASSWORD', 'utf8').trim();
 const POSTGRES_PASSWORD = fs.readFileSync('/secrets/POSTGRES_PASSWORD', 'utf8').trim();
 
-// Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Secrets info endpoint - shows masked secrets and metadata
 app.get('/api/secrets-info', (req, res) => {
   res.json({
     postgres: {
@@ -50,21 +47,36 @@ app.get('/api/secrets-info', (req, res) => {
   });
 });
 
-// Postgres client
-const pgClient = new Client({
-  host: 'postgres',
-  port: 5432,
-  database: 'chatapp',
-  user: 'chatuser',
-  password: POSTGRES_PASSWORD,
-});
-
-// Redis clients
 const redisSub = redis.createClient({ url: `redis://:${REDIS_PASSWORD}@redis:6379` });
 const redisPub = redis.createClient({ url: `redis://:${REDIS_PASSWORD}@redis:6379` });
 
+let pgClient = null;
+let ready = false;
+
+async function connectPostgres(maxRetries = 10, delay = 3000) {
+  for (let i = 0; i < maxRetries; i++) {
+    const client = new Client({
+      host: 'postgres',
+      port: 5432,
+      database: 'chatapp',
+      user: 'chatuser',
+      password: POSTGRES_PASSWORD,
+    });
+    try {
+      await client.connect();
+      console.log('Connected to Postgres');
+      return client;
+    } catch (err) {
+      await client.end().catch(() => {});
+      console.log(`Postgres attempt ${i + 1}/${maxRetries} failed: ${err.message}`);
+      if (i < maxRetries - 1) await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw new Error('Could not connect to Postgres after retries');
+}
+
 async function init() {
-  await pgClient.connect();
+  pgClient = await connectPostgres();
   await redisSub.connect();
   await redisPub.connect();
 
@@ -81,6 +93,7 @@ async function init() {
     io.emit('message', JSON.parse(message));
   });
 
+  ready = true;
   console.log('Connected to Postgres and Redis');
   console.log(`Postgres password preview: ${POSTGRES_PASSWORD.substring(0, 4)}****`);
   console.log(`Redis password preview: ${REDIS_PASSWORD.substring(0, 4)}****`);
@@ -90,6 +103,11 @@ init().catch(console.error);
 
 io.on('connection', async (socket) => {
   console.log('User connected:', socket.id);
+
+  if (!ready) {
+    socket.emit('history', []);
+    return;
+  }
 
   try {
     const result = await pgClient.query(
@@ -101,11 +119,16 @@ io.on('connection', async (socket) => {
   }
 
   socket.on('message', async (data) => {
-    await pgClient.query(
-      'INSERT INTO messages (username, message) VALUES ($1, $2)',
-      [data.username, data.message]
-    );
-    await redisPub.publish('chat', JSON.stringify(data));
+    if (!ready) return;
+    try {
+      await pgClient.query(
+        'INSERT INTO messages (username, message) VALUES ($1, $2)',
+        [data.username, data.message]
+      );
+      await redisPub.publish('chat', JSON.stringify(data));
+    } catch (err) {
+      console.error('Error handling message:', err);
+    }
   });
 
   socket.on('disconnect', () => {
