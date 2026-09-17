@@ -1,0 +1,21 @@
+- !policy
+  id: conjur/authn-jwt/k8s-local
+  body:
+    - !webservice
+
+    - !variable
+      id: jwks-value
+
+    - !variable
+      id: token-app-property
+
+    - !variable
+      id: issuer
+
+    - !group
+      id: authenticatable-hosts
+
+    - !permit
+      role: !group authenticatable-hosts
+      privilege: [ read, authenticate ]
+      resource: !webservice

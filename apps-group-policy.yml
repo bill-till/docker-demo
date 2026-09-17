@@ -1,0 +1,11 @@
+- !group
+  id: apps
+
+- !permit
+  role: !group apps
+  privilege: [ read, authenticate ]
+  resource: !webservice
+
+- !grant
+  role: !group apps
+  member: !host /data/docker-demo/docker-demo-sa

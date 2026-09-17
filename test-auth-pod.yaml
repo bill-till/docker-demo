@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: conjur-auth-test
+  namespace: default
+spec:
+  serviceAccountName: docker-demo-sa
+  containers:
+    - name: test
+      image: curlimages/curl:latest
+      command: ["sh", "-c"]
+      args:
+        - |
+          JWT=$(cat /var/run/secrets/conjur/token)
+          echo "=== Auth Response ==="
+          curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
+            "https://bt-test.secretsmgr.cyberark.cloud/api/authn-jwt/k8s-local-v2/conjur/authenticate" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "jwt=$JWT"
+      volumeMounts:
+        - name: conjur-token
+          mountPath: /var/run/secrets/conjur
+          readOnly: true
+  volumes:
+    - name: conjur-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              path: token
+              expirationSeconds: 6000
+              audience: "conjur"
+  restartPolicy: Never

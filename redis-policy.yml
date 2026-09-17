@@ -1,0 +1,20 @@
+# Define a policy branch for our app
+- !policy
+  id: docker-demo
+  body:
+    # The secret variable that holds the Redis password
+    - !variable
+      id: redis-password
+
+    # The workload identity representing our Kubernetes app
+    - !host
+      id: docker-demo-app
+      annotations:
+        authn-k8s/namespace: default
+        authn-k8s/service-account: docker-demo-sa
+
+    # Grant the host permission to fetch the variable
+    - !permit
+      role: !host docker-demo-app
+      privilege: [ read, execute ]
+      resource: !variable redis-password

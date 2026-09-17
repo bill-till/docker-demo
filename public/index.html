@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat App - Azure Key Vault Demo</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 20px; gap: 16px; }
+    h1 { color: #e94560; font-size: 1rem; letter-spacing: 1px; text-transform: uppercase; }
+    #secrets-panel { width: 100%; max-width: 900px; background: #16213e; border-radius: 12px; padding: 16px; }
+    #secrets-panel h2 { color: #e94560; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+    .secrets-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .secret-card { background: #0f3460; border-radius: 8px; padding: 12px; }
+    .secret-card h3 { font-size: 0.8rem; color: #e94560; margin-bottom: 8px; text-transform: uppercase; }
+    .secret-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; padding: 4px 0; border-bottom: 1px solid #16213e; gap: 8px; }
+    .secret-row .label { color: #aaa; min-width: 80px; }
+    .secret-row .value { color: #4ecca3; font-family: monospace; word-break: break-all; }
+    .secret-row .value.password { color: #f7b731; }
+    .toggle-btn { background: #1a1a2e; border: 1px solid #e94560; color: #e94560; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 0.65rem; white-space: nowrap; }
+    .toggle-btn:hover { background: #e94560; color: white; }
+    .pod-info { margin-top: 12px; background: #0f3460; border-radius: 8px; padding: 12px; font-size: 0.75rem; }
+    .pod-info h3 { color: #e94560; font-size: 0.8rem; margin-bottom: 8px; text-transform: uppercase; }
+    .actions { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+    #refresh-btn { padding: 6px 14px; background: #e94560; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.75rem; }
+    #toggle-all-btn { padding: 6px 14px; background: #0f3460; color: #e94560; border: 1px solid #e94560; border-radius: 6px; cursor: pointer; font-size: 0.75rem; }
+    #last-refreshed { font-size: 0.7rem; color: #888; }
+    #app { width: 100%; max-width: 900px; height: 45vh; display: flex; flex-direction: column; background: #16213e; border-radius: 12px; overflow: hidden; }
+    #header { background: #0f3460; padding: 14px 20px; font-size: 1rem; font-weight: bold; color: #e94560; }
+    #messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .message { background: #0f3460; padding: 10px 14px; border-radius: 8px; max-width: 80%; }
+    .message .username { font-size: 0.75rem; color: #e94560; margin-bottom: 4px; font-weight: bold; }
+    .message.mine { align-self: flex-end; background: #e94560; }
+    .message.mine .username { color: #fff; }
+    #input-area { display: flex; padding: 12px; gap: 8px; background: #0f3460; }
+    #username { width: 130px; padding: 10px; border-radius: 8px; border: none; background: #16213e; color: #eee; }
+    #message { flex: 1; padding: 10px; border-radius: 8px; border: none; background: #16213e; color: #eee; }
+    #send { padding: 10px 20px; background: #e94560; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>🔐 Chat App — Azure Key Vault Secrets Demo</h1>
+  <div id="secrets-panel">
+    <h2>🔑 Active Secrets (pulled from Azure Key Vault at pod startup)</h2>
+    <div class="secrets-grid">
+      <div class="secret-card">
+        <h3>🐘 PostgreSQL</h3>
+        <div class="secret-row"><span class="label">Host</span><span class="value" id="pg-host">loading...</span></div>
+        <div class="secret-row"><span class="label">Database</span><span class="value" id="pg-db">loading...</span></div>
+        <div class="secret-row"><span class="label">User</span><span class="value" id="pg-user">loading...</span></div>
+        <div class="secret-row">
+          <span class="label">Password</span>
+          <span class="value password" id="pg-pass">loading...</span>
+          <button class="toggle-btn" onclick="toggleSecret('pg-pass', 'pg')">👁 Show</button>
+        </div>
+        <div class="secret-row"><span class="label">Length</span><span class="value" id="pg-len">loading...</span></div>
+        <div class="secret-row"><span class="label">Source</span><span class="value" id="pg-source">loading...</span></div>
+        <div class="secret-row"><span class="label">Secret Name</span><span class="value" id="pg-name">loading...</span></div>
+      </div>
+      <div class="secret-card">
+        <h3>⚡ Redis</h3>
+        <div class="secret-row"><span class="label">Host</span><span class="value" id="redis-host">loading...</span></div>
+        <div class="secret-row"><span class="label">Port</span><span class="value" id="redis-port">loading...</span></div>
+        <div class="secret-row">
+          <span class="label">Password</span>
+          <span class="value password" id="redis-pass">loading...</span>
+          <button class="toggle-btn" onclick="toggleSecret('redis-pass', 'redis')">👁 Show</button>
+        </div>
+        <div class="secret-row"><span class="label">Length</span><span class="value" id="redis-len">loading...</span></div>
+        <div class="secret-row"><span class="label">Source</span><span class="value" id="redis-source">loading...</span></div>
+        <div class="secret-row"><span class="label">Secret Name</span><span class="value" id="redis-name">loading...</span></div>
+      </div>
+    </div>
+    <div class="pod-info">
+      <h3>🚀 Pod Info</h3>
+      <div class="secret-row"><span class="label">Hostname</span><span class="value" id="pod-hostname">loading...</span></div>
+      <div class="secret-row"><span class="label">Secrets loaded at</span><span class="value" id="pod-started">loading...</span></div>
+    </div>
+    <div class="actions">
+      <button id="refresh-btn" onclick="loadSecrets()">🔄 Refresh</button>
+      <button id="toggle-all-btn" onclick="toggleAll()">👁 Show All Passwords</button>
+      <span id="last-refreshed"></span>
+    </div>
+  </div>
+  <div id="app">
+    <div id="header">💬 Real-time Chat</div>
+    <div id="messages"></div>
+    <div id="input-area">
+      <input id="username" placeholder="Your name" value="User" />
+      <input id="message" placeholder="Type a message..." />
+      <button id="send">Send</button>
+    </div>
+  </div>
+  <script>
+    const socket = io();
+    const messagesDiv = document.getElementById('messages');
+    const username = document.getElementById('username');
+    const messageInput = document.getElementById('message');
+    const sendBtn = document.getElementById('send');
+
+    let secretsData = null;
+    let allVisible = false;
+
+    async function loadSecrets() {
+      try {
+        const res = await fetch('/api/secrets-info');
+        secretsData = await res.json();
+        document.getElementById('pg-host').textContent = secretsData.postgres.host;
+        document.getElementById('pg-db').textContent = secretsData.postgres.database;
+        document.getElementById('pg-user').textContent = secretsData.postgres.user;
+        document.getElementById('pg-pass').textContent = secretsData.postgres.password_preview;
+        document.getElementById('pg-pass').dataset.full = secretsData.postgres.password_full;
+        document.getElementById('pg-len').textContent = secretsData.postgres.password_length + ' chars';
+        document.getElementById('pg-source').textContent = secretsData.postgres.source;
+        document.getElementById('pg-name').textContent = secretsData.postgres.secret_name;
+        document.getElementById('redis-host').textContent = secretsData.redis.host;
+        document.getElementById('redis-port').textContent = secretsData.redis.port;
+        document.getElementById('redis-pass').textContent = secretsData.redis.password_preview;
+        document.getElementById('redis-pass').dataset.full = secretsData.redis.password_full;
+        document.getElementById('redis-len').textContent = secretsData.redis.password_length + ' chars';
+        document.getElementById('redis-source').textContent = secretsData.redis.source;
+        document.getElementById('redis-name').textContent = secretsData.redis.secret_name;
+        document.getElementById('pod-hostname').textContent = secretsData.pod.hostname;
+        document.getElementById('pod-started').textContent = new Date(secretsData.pod.started_at).toLocaleString();
+        document.getElementById('last-refreshed').textContent = 'Last refreshed: ' + new Date().toLocaleTimeString();
+      } catch (err) {
+        console.error('Failed to load secrets:', err);
+      }
+    }
+
+    function toggleSecret(elementId, type) {
+      const el = document.getElementById(elementId);
+      const btn = el.nextElementSibling;
+      if (el.dataset.showing === 'true') {
+        el.textContent = el.dataset.preview;
+        el.dataset.showing = 'false';
+        btn.textContent = '👁 Show';
+      } else {
+        el.dataset.preview = el.textContent;
+        el.textContent = el.dataset.full || el.textContent;
+        el.dataset.showing = 'true';
+        btn.textContent = '🙈 Hide';
+      }
+    }
+
+    function toggleAll() {
+      allVisible = !allVisible;
+      const btn = document.getElementById('toggle-all-btn');
+      ['pg-pass', 'redis-pass'].forEach(id => {
+        const el = document.getElementById(id);
+        if (allVisible) {
+          el.dataset.preview = el.dataset.preview || el.textContent;
+          el.textContent = el.dataset.full || el.textContent;
+          el.dataset.showing = 'true';
+          el.nextElementSibling.textContent = '🙈 Hide';
+        } else {
+          el.textContent = el.dataset.preview || el.textContent;
+          el.dataset.showing = 'false';
+          el.nextElementSibling.textContent = '👁 Show';
+        }
+      });
+      btn.textContent = allVisible ? '🙈 Hide All Passwords' : '👁 Show All Passwords';
+    }
+
+    loadSecrets();
+
+    function addMessage(data, isHistory = false) {
+      const div = document.createElement('div');
+      div.className = 'message' + (data.username === username.value && !isHistory ? ' mine' : '');
+      div.innerHTML = '<div class="username">' + data.username + '</div><div>' + data.message + '</div>';
+      messagesDiv.appendChild(div);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    socket.on('history', (messages) => { messages.forEach(m => addMessage(m, true)); });
+    socket.on('message', (data) => { addMessage(data); });
+
+    sendBtn.onclick = () => {
+      const msg = messageInput.value.trim();
+      if (!msg) return;
+      socket.emit('message', { username: username.value, message: msg });
+      messageInput.value = '';
+    };
+
+    messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendBtn.click(); });
+  </script>
+</body>
+</html>

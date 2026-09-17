@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      initContainers:
+        - name: fetch-secrets
+          image: mcr.microsoft.com/azure-cli:latest
+          command:
+            - sh
+            - -c
+            - "az login --service-principal --username $CLIENT_ID --password $CLIENT_SECRET --tenant $TENANT_ID && az keyvault secret show --vault-name bt-azure-vault-1 --name chat-app-postgres-password --query value -o tsv > /secrets/POSTGRES_PASSWORD && echo Secrets fetched"
+          env:
+            - name: CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: azure-keyvault-sp
+                  key: clientid
+            - name: CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: azure-keyvault-sp
+                  key: clientsecret
+            - name: TENANT_ID
+              value: "37f926b7-d4c2-458d-a56c-d1b2b30fc700"
+          volumeMounts:
+            - name: secrets-vol
+              mountPath: /secrets
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          command:
+            - sh
+            - -c
+            - "export POSTGRES_PASSWORD=$(cat /secrets/POSTGRES_PASSWORD) && docker-entrypoint.sh postgres"
+          env:
+            - name: POSTGRES_DB
+              value: chatapp
+            - name: POSTGRES_USER
+              value: chatuser
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: secrets-vol
+              mountPath: /secrets
+              readOnly: true
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: secrets-vol
+          emptyDir:
+            medium: Memory
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: default
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432

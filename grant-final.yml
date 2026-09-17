@@ -1,0 +1,3 @@
+- !grant
+  role: !group authenticatable-hosts
+  member: !host /data/docker-demo/docker-demo-app

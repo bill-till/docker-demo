@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docker-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: docker-demo
+  template:
+    metadata:
+      labels:
+        app: docker-demo
+    spec:
+      containers:
+        - name: docker-demo
+          image: btbilltill/docker-demo:latest
+          imagePullPolicy: Always
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: REDIS_PASSWORD
+          ports:
+            - containerPort: 3000

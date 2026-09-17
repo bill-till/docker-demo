@@ -1,0 +1,3 @@
+- !grant
+  role: !group apps
+  member: !host /data/docker-demo/docker-demo-sa

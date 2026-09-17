@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docker-demo
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: docker-demo
+  template:
+    metadata:
+      labels:
+        app: docker-demo
+    spec:
+      initContainers:
+        - name: fetch-secrets
+          image: mcr.microsoft.com/azure-cli:latest
+          command:
+            - sh
+            - -c
+            - "az login --service-principal --username $CLIENT_ID --password $CLIENT_SECRET --tenant $TENANT_ID && az keyvault secret show --vault-name bt-azure-vault-1 --name chat-app-postgres-password --query value -o tsv > /secrets/POSTGRES_PASSWORD && az keyvault secret show --vault-name bt-azure-vault-1 --name chat-app-redis-password --query value -o tsv > /secrets/REDIS_PASSWORD && echo Secrets fetched"
+          env:
+            - name: CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: azure-keyvault-sp
+                  key: clientid
+            - name: CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: azure-keyvault-sp
+                  key: clientsecret
+            - name: TENANT_ID
+              value: "37f926b7-d4c2-458d-a56c-d1b2b30fc700"
+          volumeMounts:
+            - name: secrets-vol
+              mountPath: /secrets
+      containers:
+        - name: docker-demo
+          image: btbilltill/docker-demo:latest
+          imagePullPolicy: Always
+          command:
+            - sh
+            - -c
+            - "export POSTGRES_PASSWORD=$(cat /secrets/POSTGRES_PASSWORD) && export REDIS_PASSWORD=$(cat /secrets/REDIS_PASSWORD) && node index.js"
+          ports:
+            - containerPort: 3000
+          volumeMounts:
+            - name: secrets-vol
+              mountPath: /secrets
+              readOnly: true
+      volumes:
+        - name: secrets-vol
+          emptyDir:
+            medium: Memory

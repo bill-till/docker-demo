@@ -1,0 +1,4 @@
+- !permit
+  role: !host "system:serviceaccount:default:docker-demo-sa"
+  privilege: [ read, execute ]
+  resource: !variable redis-password

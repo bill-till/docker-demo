@@ -1,0 +1,4 @@
+- !host
+  id: docker-demo-app
+  annotations:
+    authn-jwt/k8s-local/sub: system:serviceaccount:default:docker-demo-sa

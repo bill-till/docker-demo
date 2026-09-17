@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: conjur-auth-test
+  namespace: default
+spec:
+  serviceAccountName: docker-demo-sa
+  containers:
+    - name: test
+      image: curlimages/curl:latest
+      command: ["sh", "-c"]
+      args:
+        - |
+          JWT=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+          PAYLOAD=$(echo $JWT | cut -d'.' -f2)
+          # Add padding if needed
+          PADDED="${PAYLOAD}=="
+          echo $PADDED | base64 -d 2>/dev/null
+      restartPolicy: Never

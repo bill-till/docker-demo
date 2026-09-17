@@ -1,0 +1,7 @@
+- !host
+  id: docker-demo-sa
+
+- !permit
+  role: !host docker-demo-sa
+  privilege: [ read, execute ]
+  resource: !variable redis-password

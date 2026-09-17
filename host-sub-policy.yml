@@ -1,0 +1,14 @@
+- !host
+  id: "system:serviceaccount:default:docker-demo-sa"
+  annotations:
+    authn-jwt/k8s-local/namespace: default
+    authn-jwt/k8s-local/service-account: docker-demo-sa
+
+- !permit
+  role: !host "system:serviceaccount:default:docker-demo-sa"
+  privilege: [ read, execute ]
+  resource: !variable redis-password
+
+- !grant
+  role: !group /conjur/authn-jwt/k8s-local/authenticatable-hosts
+  member: !host "system:serviceaccount:default:docker-demo-sa"

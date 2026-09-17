@@ -1,0 +1,8 @@
+- !policy
+  id: chat-app
+  body:
+    - !variable
+      id: postgres-password
+
+    - !variable
+      id: redis-password
