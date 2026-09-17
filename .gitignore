@@ -1,0 +1,4 @@
+secret-provider-class.yaml
+azure-keyvault-sp.yaml
+*.env
+.env*
